@@ -20,9 +20,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout CBOM tool repo
         uses: actions/checkout@v4
-
+        with:
+          repository: kayranfatih/cbom-cyclonedx1.6
+          ref: main
+          path: cbom-tool
+          
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
