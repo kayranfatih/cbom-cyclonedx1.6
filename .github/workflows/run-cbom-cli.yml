@@ -35,9 +35,10 @@ jobs:
       - name: Install dependencies from requirements.txt
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r cbom-tool/requirements.txt
 
       - name: Run CBOM CLI
+        working-directory: cbom-tool
         run: |
           ARGS="${{ inputs.args || github.event.inputs.args }}"
           echo "Running: python -m cbom.cli.cli $ARGS"
