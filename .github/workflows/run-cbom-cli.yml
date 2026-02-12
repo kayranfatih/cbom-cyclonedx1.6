@@ -10,10 +10,19 @@ on:
 
   workflow_call:
     inputs:
-      args:
-        required: false
+      sarif_artifact:
+        required: true
         type: string
-        default: "--help"
+      sarif_file:
+        required: true
+        type: string
+      out_json:
+        required: true
+        type: string
+      cc:
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   run:
@@ -37,9 +46,46 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r cbom-tool/requirements.txt
 
+      - name: Download SARIF artifact (workflow_call only)
+        if: ${{ github.event_name == 'workflow_call' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.sarif_artifact }}
+          path: workspace
+
       - name: Run CBOM CLI
         working-directory: cbom-tool
         run: |
-          ARGS="${{ inputs.args || github.event.inputs.args }}"
-          echo "Running: python -m cbom.cli.cli $ARGS"
-          python -m cbom.cli.cli $ARGS
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ARGS="${{ github.event.inputs.args }}"
+            echo "Running (dispatch): python -m cbom.cli.cli ${ARGS}"
+            python -m cbom.cli.cli ${ARGS}
+            exit 0
+          fi
+
+          # workflow_call path
+          SARIF_PATH="../workspace/${{ inputs.sarif_file }}"
+          OUT_PATH="../workspace/${{ inputs.out_json }}"
+
+          if [ ! -f "${SARIF_PATH}" ]; then
+            echo "SARIF not found: ${SARIF_PATH}"
+            echo "workspace contents:"
+            ls -la ../workspace || true
+            exit 1
+          fi
+
+          echo "Running (call): python -m cbom.cli.cli generate ${SARIF_PATH} -o ${OUT_PATH} (cc=${{ inputs.cc }})"
+          if [ "${{ inputs.cc }}" = "true" ]; then
+            python -m cbom.cli.cli generate "${SARIF_PATH}" -o "${OUT_PATH}" -cc
+          else
+            python -m cbom.cli.cli generate "${SARIF_PATH}" -o "${OUT_PATH}"
+          fi
+
+      - name: Upload CBOM JSON (workflow_call only)
+        if: ${{ github.event_name == 'workflow_call' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbom-output
+          path: workspace/${{ inputs.out_json }}
