@@ -1,91 +1,31 @@
-name: run-cbom-cli
+name: call-codeql-cbom-scan
 
 on:
   workflow_dispatch:
-    inputs:
-      args:
-        description: "Args for: python -m cbom.cli.cli <args>"
-        required: false
-        default: "--help"
 
-  workflow_call:
-    inputs:
-      sarif_artifact:
-        required: true
-        type: string
-      sarif_file:
-        required: true
-        type: string
-      out_json:
-        required: true
-        type: string
-      cc:
-        required: false
-        type: boolean
-        default: true
-
-jobs:
-  run:
-    runs-on: ubuntu-latest
-
+jobs: 
+  run-cbom-scan:
+    runs-on: [ linux, xlarge ]
+    container:
+        image: containers.github.siemens.cloud/s7p/s7p.tools.linux.munin:v1.1.0
+        credentials:
+          username: ${{ secrets.SECURITY_USER_DOCKER }}
+          password: ${{ secrets.SECURITY_PAT_DOCKER }}
+        options: --user dockle
+        
     steps:
-      - name: Checkout CBOM tool repo
-        uses: actions/checkout@v4
+      - name: run-cbom-scan
+        uses: S7P/s7p.security.cbom-action@main
         with:
-          repository: kayranfatih/cbom-cyclonedx1.6
-          ref: main
-          path: cbom-tool
-          
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies from requirements.txt
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r cbom-tool/requirements.txt
-
-      - name: Download SARIF artifact (workflow_call only)
-        if: ${{ github.event_name == 'workflow_call' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.sarif_artifact }}
-          path: workspace
-
-      - name: Run CBOM CLI
-        working-directory: cbom-tool
-        run: |
-          set -euo pipefail
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            ARGS="${{ github.event.inputs.args }}"
-            echo "Running (dispatch): python -m cbom.cli.cli ${ARGS}"
-            python -m cbom.cli.cli ${ARGS}
-            exit 0
-          fi
-
-          # workflow_call path
-          SARIF_PATH="../workspace/${{ inputs.sarif_file }}"
-          OUT_PATH="../workspace/${{ inputs.out_json }}"
-
-          if [ ! -f "${SARIF_PATH}" ]; then
-            echo "SARIF not found: ${SARIF_PATH}"
-            echo "workspace contents:"
-            ls -la ../workspace || true
-            exit 1
-          fi
-
-          echo "Running (call): python -m cbom.cli.cli generate ${SARIF_PATH} -o ${OUT_PATH} (cc=${{ inputs.cc }})"
-          if [ "${{ inputs.cc }}" = "true" ]; then
-            python -m cbom.cli.cli generate "${SARIF_PATH}" -o "${OUT_PATH}" -cc
-          else
-            python -m cbom.cli.cli generate "${SARIF_PATH}" -o "${OUT_PATH}"
-          fi
-
-      - name: Upload CBOM JSON (workflow_call only)
-        if: ${{ github.event_name == 'workflow_call' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: cbom-output
-          path: workspace/${{ inputs.out_json }}
+          LANGUAGE_MATRIX: "cpp"
+          TARGET: "cpu1500_munin"
+          GIT_S7P_PROJECT: "s7p.cpu1500.unix.munin"
+          CPU1500_COMMIT: "major"
+          BUILD_PAT: ${{ secrets.SECURITY_BUILD_TOKEN }}
+          LFS_PUBLIC_KEY: ${{ secrets.SECURITY_GIT_SSH_KEY_PUBLIC }}
+          LFS_KEY: ${{ secrets.SECURITY_GIT_SSH_KEY }}
+          WORKING_DIRECTORY: "/app"
+          CLONE_DIRECTORY: "/app/work"
+          RULESET_COMMIT: "275437b"
+          BUILDSCRIPT: "s7p.cpu1500/_gen/antparallelmake_unix.sh cpu1500_munin"
+        
